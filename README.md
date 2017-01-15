@@ -1,5 +1,7 @@
 # Honey SQL for HBase Phoenix
 
+[![Build Status](https://travis-ci.org/juvenn/honeysql-phoenix.svg?branch=master)](https://travis-ci.org/juvenn/honeysql-phoenix)
+
 This library extends Honey SQL with additional constructs to support
 Phoenix-specific queries, such as upsert, dynamic columns, etc. It
 facilitates building SQL queries to query Phoenix over HBase.
@@ -8,9 +10,9 @@ Apache [Phoenix](http://phoenix.apache.org) provides a low latency SQL
 query engine over HBase, that enables clients query and write HBase
 with ease.
 
-[![Build Status](https://travis-ci.org/juvenn/honeysql-phoenix.svg?branch=master)](https://travis-ci.org/juvenn/honeysql-phoenix)
-
 ## Usage
+
+[![Clojars Project](https://img.shields.io/clojars/v/walkingcloud/honeysql-phoenix.svg)](https://clojars.org/walkingcloud/honeysql-phoenix)
 
 ```clj
 (require '[honeysql.core :as sql]
