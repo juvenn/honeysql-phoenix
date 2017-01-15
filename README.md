@@ -13,7 +13,7 @@ with ease.
 ```clj
 (require '[honeysql.core :as sql]
          '[honeysql.helpers :refer :all]
-         '[honeysql-phoenix.core :as ph])
+         '[honeysql-phoenix.core :refer :all])
 ```
 
 Select with map, or keywords, or helpers:

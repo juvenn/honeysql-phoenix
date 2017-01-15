@@ -2,7 +2,7 @@
   (:require [clojure.test :refer :all]
             [honeysql.core :as sql]
             [honeysql.helpers :refer :all]
-            [honeysql-phoenix.core :as ph]))
+            [honeysql-phoenix.core :refer :all]))
 
 (deftest test-format-upsert
   (is (= (sql/format {:upsert-into :table
