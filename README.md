@@ -8,6 +8,8 @@ Apache [Phoenix](http://phoenix.apache.org) provides a low latency SQL
 query engine over HBase, that enables clients query and write HBase
 with ease.
 
+[![Build Status](https://travis-ci.org/juvenn/honeysql-phoenix.svg?branch=master)](https://travis-ci.org/juvenn/honeysql-phoenix)
+
 ## Usage
 
 ```clj
