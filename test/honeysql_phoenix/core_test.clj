@@ -46,3 +46,30 @@
           :columns [:a [:b :float] [:c :time]]
           :values [[1 0.25 :%current_time]]})))
 
+(deftest test-format-on-duplicate-key
+  (is (= (sql/format {:upsert-into :table
+                      :on-duplicate-key :ignore})
+         ["UPSERT INTO table ON DUPLICATE KEY IGNORE"]))
+  (is (= (sql/format {:upsert-into :table
+                      :on-duplicate-key {:a 1 :b 2}})
+         ["UPSERT INTO table ON DUPLICATE KEY UPDATE a = ?, b = ?" 1 2])))
+
+(deftest test-build-on-duplicate-key
+  (is (= (sql/build :upsert-into :table
+                    :on-duplicate-key :ignore)
+         {:upsert-into :table
+          :on-duplicate-key :ignore}))
+  (is (= (sql/build :upsert-into :table
+                    :on-duplicate-key {:a 1 :b "hello"})
+         {:upsert-into :table
+          :on-duplicate-key {:a 1 :b "hello"}})))
+
+(deftest test-on-duplicate-key-helper
+  (is (= (-> (upsert-into :table)
+             (on-duplicate-key :ignore))
+         {:upsert-into :table
+          :on-duplicate-key :ignore}))
+  (is (= (-> (upsert-into :table)
+             (on-duplicate-key {:a 1 :b "hello"}))
+         {:upsert-into :table
+          :on-duplicate-key {:a 1 :b "hello"}})))
