@@ -73,3 +73,10 @@
              (on-duplicate-key {:a 1 :b "hello"}))
          {:upsert-into :table
           :on-duplicate-key {:a 1 :b "hello"}})))
+
+(comment
+  (-> (upsert-into :table)
+      (columns :a [:b :varchar] [:c "char(10)"] [:d "char[5]"] [:e :time])
+      (values [[1 "b" "c" "d" :%current_time]])
+      (on-duplicate-key {:a 2 :b "b+" :e :%current_time})
+      sql/format))

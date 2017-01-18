@@ -1,6 +1,7 @@
 # Honey SQL for HBase Phoenix
 
 [![Build Status](https://travis-ci.org/juvenn/honeysql-phoenix.svg?branch=master)](https://travis-ci.org/juvenn/honeysql-phoenix)
+[![Clojars Project](https://img.shields.io/clojars/v/walkingcloud/honeysql-phoenix.svg)](https://clojars.org/walkingcloud/honeysql-phoenix)
 
 This library extends Honey SQL with additional constructs to support
 Phoenix-specific queries, such as upsert, dynamic columns, etc. It
@@ -11,8 +12,6 @@ query engine over HBase, that enables clients query and write HBase
 with ease.
 
 ## Usage
-
-[![Clojars Project](https://img.shields.io/clojars/v/walkingcloud/honeysql-phoenix.svg)](https://clojars.org/walkingcloud/honeysql-phoenix)
 
 ```clj
 (require '[honeysql.core :as sql]
@@ -62,6 +61,28 @@ Upsert dynamic columns:
     (values [[1 2 101 "hello" :%current_time]])
     sql/format)
 => ["UPSERT INTO table (a, b, var_a int, var_b CHAR(8), var_created time) VALUES (?, ?, ?, ?, current_time())" 1 2 101 "hello"]
+```
+
+Atomic update with `ON DUPLICATE KEY`:
+
+```clj
+(-> (upsert-into :table)
+    (columns :a [:b :varchar] [:c "char(10)"] [:d "char[5]"] [:e :time])
+    (values [[1 "b" "c" "d" :%current_time]])
+    (on-duplicate-key {:a 2 :b "b+" :e :%current_time})
+    sql/format)
+=> ["UPSERT INTO table (a, b varchar, c char(10), d char[5], e time) VALUES (?, ?, ?, ?, current_time()) ON DUPLICATE KEY UPDATE a = ?, b = ?, e = current_time()" 1 "b" "c" "d" 2 "b+"]
+```
+
+Or ignore on duplicate key:
+
+```clj
+(-> (upsert-into :table)
+    (on-duplicate-key :ignore)
+    (columns :a [:b :varchar])
+    (values [[1 "b"]])
+    sql/format)
+=> ["UPSERT INTO table (a, b varchar) VALUES (?, ?) ON DUPLICATE KEY IGNORE" 1 "b"]
 ```
 
 See [honeysql](https://github.com/jkk/honeysql) for more examples.
