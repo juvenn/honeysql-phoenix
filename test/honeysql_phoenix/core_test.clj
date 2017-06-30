@@ -2,6 +2,7 @@
   (:require [clojure.test :refer :all]
             [honeysql.core :as sql]
             [honeysql.helpers :refer :all]
+            [clojure.java.jdbc :as j]
             [honeysql-phoenix.core :refer :all]))
 
 (deftest test-format-upsert
@@ -80,3 +81,6 @@
       (values [[1 "b" "c" "d" :%current_time]])
       (on-duplicate-key {:a 2 :b "b+" :e :%current_time})
       sql/format))
+
+(def phoenix-spec {:connection-uri "jdbc:phoenix:localhost:2181"})
+
