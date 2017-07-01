@@ -82,5 +82,13 @@
       (on-duplicate-key {:a 2 :b "b+" :e :%current_time})
       sql/format))
 
-(def phoenix-spec {:connection-uri "jdbc:phoenix:localhost:2181"})
+(defdb phoenix-db {:quorum "127.0.0.1:2181"
+                   :zk-path "/hbase"})
+
+(deftable web-stat
+  {:table :web_stat ;; table name in hbase, case-insensitive
+   :columns [:a :b :c] ;; predefined typed columns
+   :dynamic {:x :int :y "char(8)" :ts :time}})
+
+(select! :a :b :x :y (from web-stat) (where {:a 1}))
 
