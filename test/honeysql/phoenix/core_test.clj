@@ -5,6 +5,11 @@
             [clojure.java.jdbc :as j]
             [honeysql.phoenix.core :refer :all]))
 
+(deftable test-table
+  {:table :test_table
+   :columns [:a :b :c]
+   :dynamic {:x :integer :y "decimal(10,2)" :z "ARRAY[5]"}})
+
 (deftest test-format-upsert
   (is (= (sql/format {:upsert-into :table
                       :values [{:a 1 :b 2} {:a 3 :b 4}]})
@@ -20,7 +25,12 @@
                       :from [:table]
                       :columns [[:a :float]
                                 [:b "binary(8)"]]})
-         ["SELECT id, a, b FROM table (a float, b binary(8))"])))
+         ["SELECT id, a, b FROM table (a float, b binary(8))"]))
+  (testing "select from table with dynamic columns"
+    (is (= (sql/format {:select [:a :b :y :z]
+                        :from [test-table]
+                        :limit 5})
+           ["SELECT a, b, y, z FROM test_table (z ARRAY[5], y decimal(10,2)) LIMIT ?" 5]))))
 
 (deftest test-build-upsert
   (is (= (sql/build :upsert-into :table
