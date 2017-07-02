@@ -1,9 +1,9 @@
-(ns honeysql-phoenix.core-test
+(ns honeysql.phoenix.core-test
   (:require [clojure.test :refer :all]
             [honeysql.core :as sql]
             [honeysql.helpers :refer :all]
             [clojure.java.jdbc :as j]
-            [honeysql-phoenix.core :refer :all]))
+            [honeysql.phoenix.core :refer :all]))
 
 (deftest test-format-upsert
   (is (= (sql/format {:upsert-into :table

@@ -1,4 +1,4 @@
-(ns honeysql-phoenix.core
+(ns honeysql.phoenix.core
   (:require [clojure.string :as str]
             [honeysql.format :as fmt]
             [honeysql.core :as sql]
