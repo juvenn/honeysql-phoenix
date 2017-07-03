@@ -1,0 +1,8 @@
+
+CREATE TABLE IF NOT EXISTS test_table (
+     a INTEGER NOT NULL,
+     b VARCHAR NOT NULL,
+     c VARCHAR NOT NULL,
+     date DATE,
+     CONSTRAINT PK PRIMARY KEY (a,b,c)
+);
