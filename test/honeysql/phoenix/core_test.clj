@@ -18,19 +18,19 @@
                       :columns [:a [:b :varchar] [:c "char(10)"] [:d "char[5]"]
                                 [:e :time]]
                       :values [[1 "hello" "hello" "hello" :%current_time]]})
-         ["UPSERT INTO table (a, b varchar, c char(10), d char[5], e time) VALUES (?, ?, ?, ?, current_time())" 1 "hello" "hello" "hello"])))
+         ["UPSERT INTO table (a, b varchar, c char(10), d char[5], e time)  VALUES (?, ?, ?, ?, current_time())" 1 "hello" "hello" "hello"])))
 
 (deftest test-format-select
   (is (= (sql/format {:select [:id :a :b]
                       :from [:table]
                       :columns [[:a :float]
                                 [:b "binary(8)"]]})
-         ["SELECT id, a, b FROM table (a float, b binary(8))"]))
+         ["SELECT id, a, b  FROM table (a float, b binary(8))"]))
   (testing "select from table with dynamic columns"
     (is (= (sql/format {:select [:a :b :y :z]
                         :from [test-table]
                         :limit 5})
-           ["SELECT a, b, y, z FROM test_table (z ARRAY[5], y decimal(10,2)) LIMIT ?" 5]))))
+           ["SELECT a, b, y, z FROM test_table (y decimal(10,2), z ARRAY[5]) LIMIT ?" 5]))))
 
 (deftest test-build-upsert
   (is (= (sql/build :upsert-into :table

@@ -101,15 +101,15 @@
 (defn format-table
   "Format table with optional typed columns: TEST_TABLE(a, x INTEGER ...)"
   [table columns]
-  (let [[table alias] (refn-alias table)
+  (let [[table aliaz] (refn-alias table)
         cols (if (instance? Table table)
                (attach-types (:dynamic table) columns)
                columns)]
     (str (fmt/to-sql table)
          (when-not (empty? cols)
            (str " (" (fmt/comma-join (map fmt/to-sql cols)) ")"))
-         (when alias
-           (str " " (fmt/to-sql alias))))))
+         (when aliaz
+           (str " " (fmt/to-sql aliaz))))))
 
 (defmethod fmt/format-clause :upsert-into [[op table] sqlmap]
   (str "UPSERT INTO " (format-table table (:columns sqlmap))))
@@ -146,25 +146,32 @@
                {})))
 
 (defmethod fmt/format-clause :from [[_ tables] sqlmap]
-  (let [cols (->> (:columns sqlmap) ;; user specified columns
-                  (into (:select sqlmap)))
-        table-cols (group-qualified-names cols)
-        non-cols (get table-cols :*)]
+  (let [cols (:columns sqlmap) ;; user specified columns
+        table-cols (->> cols
+                        (into (:select sqlmap))
+                        (map (comp first refn-alias))
+                        group-qualified-names)]
     (str "FROM "
-         (fmt/comma-join (for [table tables]
-                           (let [[t alias] (refn-alias table)]
-                             (condp instance? t
-                               Table
-                               (format-table table
-                                             (concat non-cols
-                                                     (get table-cols (table-name t))
-                                                     (get table-cols (keyword alias))))
-                               String
-                               (format-table table (:columns sqlmap))
-                               clojure.lang.Keyword
-                               (format-table table (:columns sqlmap))
-                               ;; subquery etc.
-                               (fmt/to-sql table))))))))
+         (fmt/comma-join
+          (for [table tables]
+            (let [[t alias] (refn-alias table)]
+              (condp instance? t
+                Table
+                (format-table table
+                              (->> (get table-cols :*)
+                                   ;; full qualified columns
+                                   (concat (get table-cols (table-name t)))
+                                   ;; alias qualified columns
+                                   (concat (get table-cols (keyword alias)))
+                                   set
+                                   ;; only handle dynamic columns
+                                   (filter #(contains? (:dynamic t) %))))
+                String
+                (format-table table cols)
+                clojure.lang.Keyword
+                (format-table table cols)
+                ;; subquery etc.
+                (fmt/to-sql table))))))))
 
 ;; TODO: support join
 
