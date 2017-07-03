@@ -60,9 +60,9 @@ and query over.
   {:quorum "127.0.0.1,127.0.0.2:2181"
    :zk-path "/hbase"})
 
-(deftable example-table
+(deftable test-table
   {:db my-db
-   :table :example_table
+   :table :test_table
    ;; columns created with table
    :columns [:a :b :c]
    ;; dynamic typed columns
