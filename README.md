@@ -19,12 +19,16 @@ with clojure data structure.
 
 ## Install
 
-    [phoenix-sql "0.2.0"]
+```clj
+[phoenix-sql "0.2.0"]
+```
 
 In addition to that, a (compatible) phoenix client should be provided:
 
-    [org.apache.hbase/hbase-client "1.2.2"]
-    [org.apache.phoenix/phoenix-core "4.10.0-HBase-1.2"]
+```clj
+[org.apache.hbase/hbase-client "1.2.2"]
+[org.apache.phoenix/phoenix-core "4.10.0-HBase-1.2"]
+```
 
 For maximum compatibility (and production deployment) though, it is
 recommended to use the client jar accompanied with server jar that had
@@ -32,7 +36,9 @@ been deployed in cluster. Put the client jar on the classpath, one of
 the ways is to put under `resources/` and then define in
 `project.clj`:
 
-    :resource-paths ["resources/phoenix-{version}-client.jar"]
+```clj
+:resource-paths ["resources/phoenix-{version}-client.jar"]
+```
 
 The client jar should include hbase-client, phoenix jdbc driver with
 ensured compatibility to the server jar.
@@ -101,7 +107,7 @@ To delete rows:
 They all execute the query and return result. There are non-banged versions
 as well which just build the query:
 
-```
+```clj
 (-> (select :tt.a :tt.b :x :tt.y)
     (from [[test-table :tt]])
     (where [:> :tt.a 42])
