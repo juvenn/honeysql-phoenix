@@ -7,86 +7,113 @@ Apache [Phoenix](http://phoenix.apache.org) provides a low latency SQL
 query engine over HBase, that enables clients query and write HBase
 with ease.
 
-The library extends [Honey SQL](https://github.com/jkk/honeysql) with
+This library extends [Honey SQL](https://github.com/jkk/honeysql) with
 additional constructs to support Phoenix-specific queries, such as
-upsert, dynamic columns, etc. It facilitates building SQL queries to
-query Phoenix over HBase.
+upsert, dynamic columns, etc. It facilitates building SQL queries
+with clojure data structure.
 
-## Usage
+## Features
+
+* Atomic update with `on-duplicate-key`
+* Automatically type-annotate dynamic columns
+
+## Install
+
+    [phoenix-sql "0.2.0"]
+
+In addition to that, a (compatible) phoenix client should be provided:
+
+    [org.apache.hbase/hbase-client "1.2.2"]
+    [org.apache.phoenix/phoenix-core "4.10.0-HBase-1.2"]
+
+For maximum compatibility (and production deployment) though, it is
+recommended to use the client jar accompanied with server jar that had
+been deployed in cluster. Put the client jar on the classpath, one of
+the ways is to put under `resources/` and then define in
+`project.clj`:
+
+    :resource-paths ["resources/phoenix-{version}-client.jar"]
+
+The client jar should include hbase-client, phoenix jdbc driver with
+ensured compatibility to the server jar.
+
+## Examples and Usage
 
 ```clj
 (require '[honeysql.core :as sql]
          '[honeysql.helpers :refer :all]
+         '[phoenix.db :refer [defdb deftable]]
          '[phoenix.honeysql :refer :all])
 ```
 
-Select with map, or keywords, or helpers:
+First of all, define db connection and table we would like to connect to
+and query over.
 
 ```clj
-;; map
-(-> {:select [:a :b]
-     :from [:table]
-     :where [:= :a 101]}
-     sql/format)
-=> ["SELECT a, b FROM table WHERE a = ?" 101]
-;; build with keywords
-(-> (sql/build :select [:a :b]
-               :from :table
-               :where [:= :a 101])
-    sql/format)
-=> ["SELECT a, b FROM table WHERE a = ?" 101]
-;; with helpers
-(-> (select :a :b)
-    (from :table)
-    (where [:= :a 101])
-    sql/format)
-=> ["SELECT a, b FROM table WHERE a = ?" 101]
+(defdb my-db
+  {:quorum "127.0.0.1,127.0.0.2:2181"
+   :zk-path "/hbase"})
+
+(deftable example-table
+  {:db my-db
+   :table :example_table
+   ;; columns created with table
+   :columns [:a :b :c]
+   ;; dynamic typed columns
+   :dynamic {:x :INTEGER :y "DECIMAL(10,2)"}})
 ```
 
-Select dynamic columns:
+To insert rows:
 
 ```clj
-(-> (select :a :b)
-    (from :table)
-    (columns [[:var_a :int] [:var_b "char(8)"] [:var_created :time]])
-    (where [:= :a 101])
-    sql/format)
-=> ["SELECT a, b FROM table (var_a int var_b char(8)) WHERE a = ?" 101]
+(upsert-into! test-table
+              (values [{:a 1 :b "b1" :c "c1" :x 42 :y 3.14}])
+              (on-duplicate-key {:x 43}))
+
+;; translate to sql as
+["UPSERT INTO test_table (a, b, c, x INTEGER, y DECIMAL(10,2))
+  VALUES (?, ?, ?, ?, ?)
+  ON DUPLICATE KEY UPDATE x=?"
+  1 "b1" "c1" 42 3.14 43]
 ```
 
-Upsert dynamic columns:
+To query rows:
 
 ```clj
-(-> (upsert-into :table)
-    (columns :a :b [:var_a :int] [:var_b "CHAR(8)"] [:var_created :time])
-    (values [[1 2 101 "hello" :%current_time]])
-    sql/format)
-=> ["UPSERT INTO table (a, b, var_a int, var_b CHAR(8), var_created time) VALUES (?, ?, ?, ?, current_time())" 1 2 101 "hello"]
+(select! :tt.a :tt.b :x :tt.y
+         (from [[test-table :tt]])
+         (where [:> :tt.a 42])
+         (limit 5))
+["SELECT tt.a, tt.b, x, tt.y
+  FROM test_table (x INTEGER, y DECIMAL(10,2)) tt
+  WHERE tt.a > ? LIMIT ?"
+  42 5]
 ```
 
-Atomic update with `ON DUPLICATE KEY`:
+To delete rows:
 
 ```clj
-(-> (upsert-into :table)
-    (columns :a [:b :varchar] [:c "char(10)"] [:d "char[5]"] [:e :time])
-    (values [[1 "b" "c" "d" :%current_time]])
-    (on-duplicate-key {:a 2 :b "b+" :e :%current_time})
-    sql/format)
-=> ["UPSERT INTO table (a, b varchar, c char(10), d char[5], e time) VALUES (?, ?, ?, ?, current_time()) ON DUPLICATE KEY UPDATE a = ?, b = ?, e = current_time()" 1 "b" "c" "d" 2 "b+"]
+(delete-from! test-table
+              (where [:> :a 42]))
+["DELETE FROM test_table WHERE a > ?" 42]
 ```
 
-Or ignore on duplicate key:
+They all execute the query and return result. There are non-banged versions
+as well which just build the query:
 
-```clj
-(-> (upsert-into :table)
-    (on-duplicate-key :ignore)
-    (columns :a [:b :varchar])
-    (values [[1 "b"]])
+```
+(-> (select :tt.a :tt.b :x :tt.y)
+    (from [[test-table :tt]])
+    (where [:> :tt.a 42])
+    (limit 5)
     sql/format)
-=> ["UPSERT INTO table (a, b varchar) VALUES (?, ?) ON DUPLICATE KEY IGNORE" 1 "b"]
+=> ["SELECT tt.a, tt.b, x, tt.y
+     FROM test_table (x INTEGER, y DECIMAL(10,2)) tt
+     WHERE tt.a > ? LIMIT ?"
+     42 5]
 ```
 
-See [honeysql](https://github.com/jkk/honeysql) for more examples.
+For more examples, please refer to [Honeysql](https://github.com/jkk/honeysql).
 
 ## License
 

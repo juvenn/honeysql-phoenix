@@ -162,3 +162,19 @@
            (select! :a :b :y :z
                     (from test-table)
                     (limit 5))))))
+
+(deftest test-examples
+  (binding [*no-op* true]
+    (is (= []
+           (upsert-into! test-table
+                         (values [{:a 1 :b "b1" :c "c1" :x 42 :y 3.14}])
+                         (on-duplicate-key {:x 43}))))
+    (is (= []
+           (select! :tt.a :tt.b :x :tt.y
+                    (from [[test-table :tt]])
+                    (where [:> :tt.a 42])
+                    (limit 5))))
+    (is (= []
+           (delete-from! test-table
+                         (where [:> :a 42]))))))
+
