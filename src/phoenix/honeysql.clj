@@ -103,7 +103,7 @@
                 Table
                 (format-table table
                               (->> (get table-cols :*)
-                                   ;; full qualified columns
+                                   ;; fully qualified columns
                                    (concat (get table-cols (db/table-name t)))
                                    ;; alias qualified columns
                                    (concat (get table-cols (keyword alias)))

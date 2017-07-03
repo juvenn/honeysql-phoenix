@@ -19,7 +19,12 @@
                       :columns [:a [:b :varchar] [:c "char(10)"] [:d "char[5]"]
                                 [:e :time]]
                       :values [[1 "hello" "hello" "hello" :%current_time]]})
-         ["UPSERT INTO table (a, b varchar, c char(10), d char[5], e time)  VALUES (?, ?, ?, ?, current_time())" 1 "hello" "hello" "hello"])))
+         ["UPSERT INTO table (a, b varchar, c char(10), d char[5], e time)  VALUES (?, ?, ?, ?, current_time())" 1 "hello" "hello" "hello"]))
+  (testing "upsert-into table with dynamic columns"
+    (is (= (sql/format {:upsert-into test-table
+                        :columns [:a :b :c :x :y [:ts :time]]
+                        :values [[1 "hello" "12" 42 42.10 :%current_time]]})
+           ["UPSERT INTO test_table (a, b, c, x integer, y decimal(10,2), ts time)  VALUES (?, ?, ?, ?, ?, current_time())" 1 "hello" "12" 42 42.10]))))
 
 (deftest test-format-select
   (is (= (sql/format {:select [:id :a :b]
@@ -31,7 +36,14 @@
     (is (= (sql/format {:select [:a :b :y :z]
                         :from [test-table]
                         :limit 5})
-           ["SELECT a, b, y, z FROM test_table (y decimal(10,2), z ARRAY[5]) LIMIT ?" 5]))))
+           ["SELECT a, b, y, z FROM test_table (y decimal(10,2), z ARRAY[5]) LIMIT ?" 5])))
+  (testing "select from sub query"
+    (is (= (sql/format {:select [:a :b :y :z]
+                        :from [{:select [:a :b :y :z]
+                                :from [test-table]
+                                :where [:> :a 100]}]
+                        :limit 5})
+           ["SELECT a, b, y, z FROM (SELECT a, b, y, z FROM test_table (y decimal(10,2), z ARRAY[5]) WHERE a > ?) LIMIT ?" 100 5]))))
 
 (deftest test-build-upsert
   (is (= (sql/build :upsert-into :table
