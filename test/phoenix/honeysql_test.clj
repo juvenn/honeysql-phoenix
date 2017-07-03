@@ -1,9 +1,10 @@
-(ns honeysql.phoenix.core-test
+(ns phoenix.honeysql-test
   (:require [clojure.test :refer :all]
-            [honeysql.core :as sql]
-            [honeysql.helpers :refer :all]
             [clojure.java.jdbc :as j]
-            [honeysql.phoenix.core :refer :all]))
+            [honeysql.core :as sql]
+            [phoenix.db :refer [defdb deftable]]
+            [honeysql.helpers :refer :all]
+            [phoenix.honeysql :refer :all]))
 
 (deftable test-table
   {:table :test_table

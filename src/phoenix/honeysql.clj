@@ -1,67 +1,11 @@
-(ns honeysql.phoenix.core
+(ns phoenix.honeysql
   (:require [clojure.string :as str]
+            [phoenix.db :as db]
             [honeysql.format :as fmt]
             [honeysql.core :as sql]
             [honeysql.helpers :refer [defhelper]
-             :as h]))
-
-(def ^:dynamic *default-db* nil)
-
-(defn add-connection-uri
-  "Build and add connection-uri to spec if not present."
-  [{:keys [quorum zk-path] :as spec}]
-  (if (:connection-uri spec)
-    spec
-    (assoc spec :connection-uri
-           (str "jdbc:phoenix:"
-                (or quorum "127.0.0.1:2181")
-                ":"
-                (or zk-path "/hbase")))))
-
-(defmacro defdb
-  "
-  Define a connection spec in the form of jdbc spec. The first def
-  will be used by default for queries where no db were specified. The
-  following options can be specified in the spec:
-
-  :connection-uri  If present will be used to connect to jdbc regardless
-                   of :quorum and :zk-path.
-  :quorum          zookeeper quorum, it should contain port. Default to
-                   be `127.0.0.1:2181`.
-  :zk-path         hbase's zookeeper znode parent, default to be
-                   `/hbase`.
-
-  See java.jdbc.
-  "
-  [db-name spec]
-  `(let [spec# (add-connection-uri ~spec)]
-     (defonce ~db-name spec#)))
-
-(defrecord Table [db table columns dynamic]
-  fmt/ToSql
-  (to-sql [_]
-    (fmt/to-sql (keyword table))))
-
-(defmacro deftable
-  "Defind a table with dynamic columns."
-  [table spec]
-  `(let [spec# (-> ~spec
-                   (update-in [:db] #(or % *default-db*))
-                   (update-in [:table] #(or % (keyword '~table))))]
-     (def ~table (map->Table spec#))))
-
-(defn table-name
-  [table]
-  (if (instance? Table table)
-    (:table table)
-    table))
-
-(defn table-db [table]
-  (if (instance? Table table)
-    (:db table *default-db*)
-    *default-db*))
-
-;; ----
+             :as h])
+  (:import [phoenix.db Table]))
 
 (defmethod fmt/format-clause :on-duplicate-key [[op values] sqlmap]
   (if (= :ignore values)
@@ -160,7 +104,7 @@
                 (format-table table
                               (->> (get table-cols :*)
                                    ;; full qualified columns
-                                   (concat (get table-cols (table-name t)))
+                                   (concat (get table-cols (db/table-name t)))
                                    ;; alias qualified columns
                                    (concat (get table-cols (keyword alias)))
                                    set
@@ -194,8 +138,8 @@
          (on-duplicate-key :ignore))
   "
   ([table & forms]
-   (let [db# (table-db ~table)]
-     `(-> (upsert-into (table-name ~table))
+   (let [db# (db/table-db ~table)]
+     `(-> (upsert-into (db/table-name ~table))
           ~@forms
           (update :columns
                   #(attach-types (:dynamic ~table) %))))))
@@ -220,13 +164,13 @@
          from-clause# (some from-clause clauses#)
          clauses# (doall (remove from-clause clauses#))
          table# (second from-clause#)
-         db# (table-db table#)
+         db# (db/table-db table#)
          cols# (cons col cols#)
          dyna-cols# (->> cols#
                          (select-keys (:dynamic (var-get (resolve table#)) {}))
                          vec)]
      `(-> (h/select ~@cols#)
-          (h/from (table-name ~table#))
+          (h/from (db/table-name ~table#))
           ~@clauses#
           (update :columns
                   #(if (empty? %)
