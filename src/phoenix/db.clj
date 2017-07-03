@@ -1,7 +1,7 @@
 (ns phoenix.db
   (:require [honeysql.format :as fmt]))
 
-(def ^:dynamic *default-db* nil)
+(def ^:dynamic *default-db* (atom nil))
 
 (defn add-connection-uri
   "Build and add connection-uri to spec if not present."
@@ -16,7 +16,7 @@
 
 (defmacro defdb
   "
-  Define a connection spec in the form of jdbc spec. The first def
+  Define a connection spec in the form of jdbc spec. The last def
   will be used by default for queries where no db were specified. The
   following options can be specified in the spec:
 
@@ -31,7 +31,8 @@
   "
   [db-name spec]
   `(let [spec# (add-connection-uri ~spec)]
-     (defonce ~db-name spec#)))
+     (defonce ~db-name spec#)
+     (reset! *default-db* ~db-name)))
 
 (defrecord Table [db table columns dynamic]
   fmt/ToSql
@@ -42,7 +43,7 @@
   "Defind a table with dynamic columns."
   [table spec]
   `(let [spec# (-> ~spec
-                   (update-in [:db] #(or % *default-db*))
+                   (update-in [:db] #(or % @*default-db*))
                    (update-in [:table] #(or % (keyword '~table))))]
      (def ~table (map->Table spec#))))
 
@@ -54,6 +55,6 @@
 
 (defn table-db [table]
   (if (instance? Table table)
-    (:db table *default-db*)
-    *default-db*))
+    (:db table @*default-db*)
+    @*default-db*))
 

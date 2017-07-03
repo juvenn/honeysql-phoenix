@@ -1,5 +1,6 @@
 (ns phoenix.honeysql
   (:require [clojure.string :as str]
+            [clojure.java.jdbc :as jdbc]
             [phoenix.db :as db]
             [honeysql.format :as fmt]
             [honeysql.core :as sql]
@@ -126,77 +127,59 @@
                 ;; subquery etc.
                 (fmt/to-sql table))))))))
 
-;; TODO: support join
+;; TODO: support join table type-inference
 
-;; ---- Define helpers
+
+(def ^:dynamic *no-op* false)
+
+(defmacro delete-from!
+  ([query]
+   `(let [db# (db/table-db ~(:delete-from query))
+          q# (sql/format ~query)]
+      (if *no-op*
+        (cons db# q#)
+        (jdbc/execute! db# q#))))
+  ([table & clauses]
+   `(delete-from! (-> (h/delete-from ~table)
+                      ~@clauses))))
 
 (defmacro upsert-into!
-  "Exectue and upsert records. E.g.:
+  "Exectue upsert-into query, E.g.:
 
-  (upsert! web-stat
+  (upsert-into! web-stat
          (columns :a :b [:dynamic_col :int] ...)
          (values ...)
          (on-duplicate-key :ignore))
   "
-  ([table & forms]
-   (let [db# (db/table-db ~table)]
-     `(-> (upsert-into (db/table-name ~table))
-          ~@forms
-          (update :columns
-                  #(attach-types (:dynamic ~table) %))))))
-
-(defn from-clause
-  "Return clause if it's form of `(from ...)`, false otherwise."
-  [clause]
-  (and (list? clause)
-       (= #'h/from (resolve (first clause)))
-       clause))
+  ([query]
+   `(let [db# (db/table-db ~(:upsert-into query))
+          q# (sql/format ~query)]
+      (if *no-op*
+        (cons db# q#)
+        (jdbc/execute! db# q#))))
+  ([table & clauses]
+   `(upsert-into! (-> (upsert-into ~table)
+                      ~@clauses))))
 
 (defmacro select!
-  "Select, execute, and return result. E.g.:
+  "Execute select query. E.g.:
 
   (select! :a :b
          (from web-stat)
          (where ...))
   "
+  ([query]
+   `(let [db# (db/table-db ~(-> (:from query)
+                                first
+                                refn-alias
+                                first))
+          q# (sql/format ~query)]
+      (if *no-op*
+        (cons db# q#)
+        (jdbc/query db# q#))))
   ([col & forms]
-   ;; TODO: support alias and multiple tables
    (let [[cols# clauses#] (split-with (comp not list?) forms)
-         from-clause# (some from-clause clauses#)
-         clauses# (doall (remove from-clause clauses#))
-         table# (second from-clause#)
-         db# (db/table-db table#)
-         cols# (cons col cols#)
-         dyna-cols# (->> cols#
-                         (select-keys (:dynamic (var-get (resolve table#)) {}))
-                         vec)]
-     `(-> (h/select ~@cols#)
-          (h/from (db/table-name ~table#))
-          ~@clauses#
-          (update :columns
-                  #(if (empty? %)
-                     ~dyna-cols#
-                     %))))))
+         cols# (cons col cols#)]
+     `(select! (-> (h/select ~@cols#)
+                   ~@clauses#)))))
 
-
-(defmacro delete! [])
-
-; :columns (:a :b :c [:d :int] :e)
-; :columns ([:a :b :c [:d :int] :e])
-; (-> (upsert-into web-stat)
-;     (columns ...)
-;     (values ...)
-;     upsert!)
-
-; for upsert!:
-; 1. columns not present, do nothing
-; 2. columns present, parse and add dynamic type
-
-; (-> (select [...])
-;     (from web-stat)
-;     (where ...)
-;     select!)
-;
-; for select!:
-; 1. :* present, add all dynamic columns
-; 2. columns present, parse and add dynamic type

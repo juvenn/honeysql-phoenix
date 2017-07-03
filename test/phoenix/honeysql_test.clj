@@ -6,6 +6,10 @@
             [honeysql.helpers :refer :all]
             [phoenix.honeysql :refer :all]))
 
+(defdb test-db
+  {:quorum "127.0.0.1:2181"
+   :zk-path "/hbase"})
+
 (deftable test-table
   {:table :test_table
    :columns [:a :b :c]
@@ -117,3 +121,44 @@
              (columns :a [:b :float] [:c :time])
              (values [[1 0.25 :%current_time]])))))
 
+(deftest test-delete-from!
+  (binding [*no-op* true]
+    (is (= [test-db "DELETE FROM test_table WHERE a = ?" 1]
+           (delete-from! (-> (delete-from test-table)
+                             (where [:= :a 1])))))
+
+    (is (= [test-db "DELETE FROM test_table WHERE a = ?" 1]
+           (delete-from! test-table
+                         (where [:= :a 1]))))))
+
+(deftest test-upsert-into!
+  (binding [*no-op* true]
+    (is (= [test-db
+            "UPSERT INTO test_table (a, b) VALUES (?, ?), (?, ?)"
+            1 2 3 4]
+           (upsert-into! (-> (upsert-into test-table)
+                             (values [{:a 1 :b 2} {:a 3 :b 4}])))))
+    (is (= [test-db
+            "UPSERT INTO test_table (a, b) VALUES (?, ?), (?, ?)"
+            1 2 3 4]
+           (upsert-into! test-table
+                         (values [{:a 1 :b 2} {:a 3 :b 4}]))))))
+
+(deftest test-select!
+  (binding [*no-op* true]
+    (is (= [test-db
+            (str "SELECT a, b, y, z"
+                 " FROM test_table (y decimal(10,2), z ARRAY[5])"
+                 " LIMIT ?")
+            5]
+           (select! (-> (select :a :b :y :z)
+                        (from test-table)
+                        (limit 5)))))
+    (is (= [test-db
+            (str "SELECT a, b, y, z"
+                 " FROM test_table (y decimal(10,2), z ARRAY[5])"
+                 " LIMIT ?")
+            5]
+           (select! :a :b :y :z
+                    (from test-table)
+                    (limit 5))))))
