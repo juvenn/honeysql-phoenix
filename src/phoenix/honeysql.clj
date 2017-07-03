@@ -7,6 +7,14 @@
              :as h])
   (:import [phoenix.db Table]))
 
+(defhelper on-duplicate-key [m args]
+  (assoc m :on-duplicate-key (if (sequential? args)
+                               (first args)
+                               args)))
+
+(defhelper upsert-into [m table]
+  (assoc m :upsert-into (if (sequential? table) (first table) table)))
+
 (defmethod fmt/format-clause :on-duplicate-key [[op values] sqlmap]
   (if (= :ignore values)
     "ON DUPLICATE KEY IGNORE"
@@ -37,10 +45,10 @@
 
 (defn- refn-alias
   "Split a reference into ref and its alias (nil if not present)."
-  [table]
-  (if (sequential? table)
-    [(first table) (second table)]
-    [table nil]))
+  [refn-or-tuple]
+  (if (sequential? refn-or-tuple)
+    [(first refn-or-tuple) (second refn-or-tuple)]
+    [refn-or-tuple nil]))
 
 (defn format-table
   "Format table with optional typed columns: TEST_TABLE(a, x INTEGER ...)"
@@ -65,21 +73,22 @@
 (fmt/register-clause! :upsert-into 45)       ;; before :select
 
 (defn split-qualifier
-  "Split qualified columns into qualifier and name, return tuple.
-  Non-qualified will have qualifier `*`."
-  [s]
-  (let [xs (str/split s #"\.")]
+  "Split terms (e.g. columns) into tuple of [qual name]. Qualifier will 
+   be `*` if its not qualified."
+  [^String term]
+  (let [xs (str/split term #"\.")]
     (if (= 1 (count xs))
       ["*" (first xs)]
       xs)))
 
-(defn group-qualified-names
-  "Group qualified names into qualifier and its names. E.g.:
+(defn group-qualified-terms
+  "Group (qualified) terms into qualifier and its names. E.g.:
 
-    => (group-qualified-names [:a \"test.b\" :test.c])
+    => (group-qualified-terms [:a \"test.b\" :test.c])
     {:* (:a) :test (:c :b)}
 
-  Note non-qualified names are grouped under :*.
+  Note both qualifier and name are keywordized, and unqualified terms are
+  grouped under :*.
   "
   [names]
   (->> names
@@ -94,7 +103,7 @@
         table-cols (->> cols
                         (into (:select sqlmap))
                         (map (comp first refn-alias))
-                        group-qualified-names)]
+                        group-qualified-terms)]
     (str "FROM "
          (fmt/comma-join
           (for [table tables]
@@ -120,14 +129,6 @@
 ;; TODO: support join
 
 ;; ---- Define helpers
-
-(defhelper on-duplicate-key [m args]
-  (assoc m :on-duplicate-key (if (sequential? args)
-                               (first args)
-                               args)))
-
-(defhelper upsert-into [m table]
-  (assoc m :upsert-into (if (sequential? table) (first table) table)))
 
 (defmacro upsert-into!
   "Exectue and upsert records. E.g.:
