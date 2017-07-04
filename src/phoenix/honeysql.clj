@@ -44,32 +44,52 @@
    #(annotate-type (get type-defs %) %)
    columns))
 
-(defn- refn-alias
-  "Split a reference into ref and its alias (nil if not present)."
-  [refn-or-tuple]
-  (if (sequential? refn-or-tuple)
-    [(first refn-or-tuple) (second refn-or-tuple)]
-    [refn-or-tuple nil]))
+(defn- ref-alias
+  "Partition a form into ref and alias, assuming [ref alias] form."
+  [form]
+  (if (sequential? form)
+    [(first form) (second form)]
+    [form nil]))
 
-(defn format-table
+(defn format-columns [cols]
+  (fmt/paren-wrap (fmt/comma-join (map fmt/to-sql cols))))
+
+(defn format-table-columns
   "Format table with optional typed columns: TEST_TABLE(a, x INTEGER ...)"
   [table columns]
-  (let [[table aliaz] (refn-alias table)
+  (let [[table aliaz] (ref-alias table)
         cols (if (instance? Table table)
                (attach-types (:dynamic table) columns)
                columns)]
     (str (fmt/to-sql table)
          (when-not (empty? cols)
-           (str " (" (fmt/comma-join (map fmt/to-sql cols)) ")"))
+          (str " " (format-columns cols)) )
          (when aliaz
            (str " " (fmt/to-sql aliaz))))))
 
+(defmethod fmt/format-clause :values [[_ values] _]
+  (if (sequential? (first values))
+    ;; value in vector form
+    (str "VALUES "
+         (fmt/comma-join
+          (for [xs values] (format-columns xs))))
+    ;; value in map form
+    (let [ks (keys (first values))]
+      (str "VALUES "
+           (fmt/comma-join
+            (for [m values]
+              (format-columns (map (partial get m) ks))))))))
+
 (defmethod fmt/format-clause :upsert-into [[op table] sqlmap]
-  (str "UPSERT INTO " (format-table table (:columns sqlmap))))
+  (let [cols (or (:columns sqlmap)
+                 (keys (first (:values sqlmap))))]
+    (str "UPSERT INTO " (format-table-columns table cols))))
 
 ;; Phoenix does not support insert-into, define it anyway.
 (defmethod fmt/format-clause :insert-into [[op table] sqlmap]
-  (str "INSERT INTO " (format-table table (:columns sqlmap))))
+  (let [cols (or (:columns sqlmap)
+                 (keys (first (:values sqlmap))))]
+    (str "INSERT INTO " (format-table-columns table cols))))
 
 (fmt/register-clause! :upsert-into 45)       ;; before :select
 
@@ -103,15 +123,15 @@
   (let [cols (:columns sqlmap) ;; user specified columns
         table-cols (->> cols
                         (into (:select sqlmap))
-                        (map (comp first refn-alias))
+                        (map (comp first ref-alias))
                         group-qualified-terms)]
     (str "FROM "
          (fmt/comma-join
           (for [table tables]
-            (let [[t alias] (refn-alias table)]
+            (let [[t alias] (ref-alias table)]
               (condp instance? t
                 Table
-                (format-table table
+                (format-table-columns table
                               (->> (get table-cols :*)
                                    ;; fully qualified columns
                                    (concat (get table-cols (db/table-name t)))
@@ -121,9 +141,9 @@
                                    ;; only handle dynamic columns
                                    (filter #(contains? (:dynamic t) %))))
                 String
-                (format-table table cols)
+                (format-table-columns table cols)
                 clojure.lang.Keyword
-                (format-table table cols)
+                (format-table-columns table cols)
                 ;; subquery etc.
                 (fmt/to-sql table))))))))
 
@@ -171,7 +191,7 @@
   ([query]
    `(let [db# (db/table-db ~(-> (:from query)
                                 first
-                                refn-alias
+                                ref-alias
                                 first))
           q# (sql/format ~query)]
       (if *no-op*
