@@ -62,10 +62,10 @@
                (attach-types (:dynamic table) columns)
                columns)]
     (str (fmt/to-sql table)
-         (when-not (empty? cols)
-          (str " " (format-columns cols)) )
          (when aliaz
-           (str " " (fmt/to-sql aliaz))))))
+           (str " " (fmt/to-sql aliaz)))
+         (when-not (empty? cols)
+          (str " " (format-columns cols))))))
 
 (defmethod fmt/format-clause :values [[_ values] _]
   (if (sequential? (first values))
@@ -116,7 +116,7 @@
        (filter #(or (keyword? %) (string? %)))
        (map (comp split-qualifier name))
        (reduce (fn [m [k v]]
-                 (update m (keyword k) conj (keyword v)))
+                 (update m (keyword k) (fnil conj []) (keyword v)))
                {})))
 
 (defmethod fmt/format-clause :from [[_ tables] sqlmap]

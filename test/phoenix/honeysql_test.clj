@@ -80,15 +80,16 @@
                         :limit 5}))))
   (testing "aliased columns are type-inferred too"
     (is (= [(str "SELECT tt.a, tt.b, y, tt.z"
-                 " FROM test_table (y decimal(10,2), z ARRAY[5]) tt LIMIT ?")
+                 " FROM test_table tt (y decimal(10,2), z ARRAY[5]) LIMIT ?")
             5]
            (sql/format {:select [:tt.a :tt.b :y :tt.z]
                         :from [[test-table :tt]]
                         :limit 5}))))
   (testing "columns in sub query are type-inferred"
-    (is (= [(str "SELECT a, b, y, z FROM"
-                 " (SELECT a, b, y, z FROM test_table (y decimal(10,2), z ARRAY[5]) WHERE a > ?)"
-                 " LIMIT ?")
+    (is (= [(str "SELECT a, b, y, z FROM ("
+                   "SELECT a, b, y, z"
+                   " FROM test_table (y decimal(10,2), z ARRAY[5]) WHERE a > ?"
+                 ") LIMIT ?")
             100 5]
            (sql/format {:select [:a :b :y :z]
                         :from [{:select [:a :b :y :z]
@@ -174,10 +175,9 @@
                          (values [{:a 1 :b "b1" :c "c1" :x 42 :y 3.14}])
                          (on-duplicate-key {:x 43}))))
     (is (= [test-db
-            (str
-             "SELECT tt.a, tt.b, x, tt.y"
-             " FROM test_table (x integer, y decimal(10,2)) tt"
-             " WHERE tt.a > ? LIMIT ?")
+            (str "SELECT tt.a, tt.b, x, tt.y"
+                 " FROM test_table tt (x integer, y decimal(10,2))"
+                 " WHERE tt.a > ? LIMIT ?")
             42 5]
            (select! :tt.a :tt.b :x :tt.y
                     (from [test-table :tt])
