@@ -64,28 +64,29 @@
                         :values [[1 "hello" "12" 42 42.10 :%current_time]]})))))
 
 (deftest test-format-select
-  (testing "Explicitly specify table columns"
+  (testing "Explicitly specify column and types"
     (is (= ["SELECT id, a, b  FROM table (a float, b binary(8))"]
            (sql/format {:select [:id :a :b]
                         :from [:table]
                         :columns [[:a :float]
                                   [:b "binary(8)"]]}))))
-  (testing "selected dynamic columns are type-inferred"
+  (testing "selected fields are type-inferred"
     (is (= [(str "SELECT a, b, y, z"
-                 " FROM test_table (y decimal(10,2), z ARRAY[5])"
+                 " FROM test_table (y integer, z ARRAY[5])"
                  " LIMIT ?")
             5]
            (sql/format {:select [:a :b :y :z]
                         :from [test-table]
+                        :columns [[:y :integer]]
                         :limit 5}))))
-  (testing "aliased columns are type-inferred too"
+  (testing "aliased fields are type-inferred too"
     (is (= [(str "SELECT tt.a, tt.b, y, tt.z"
                  " FROM test_table tt (y decimal(10,2), z ARRAY[5]) LIMIT ?")
             5]
            (sql/format {:select [:tt.a :tt.b :y :tt.z]
                         :from [[test-table :tt]]
                         :limit 5}))))
-  (testing "columns in sub query are type-inferred"
+  (testing "sub query are type-inferred"
     (is (= [(str "SELECT a, b, y, z FROM ("
                    "SELECT a, b, y, z"
                    " FROM test_table (y decimal(10,2), z ARRAY[5]) WHERE a > ?"

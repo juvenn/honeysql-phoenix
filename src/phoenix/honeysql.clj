@@ -102,6 +102,17 @@
       ["*" (first xs)]
       xs)))
 
+(defn infer-qual-col
+  "Infer qualifier and column from a column op."
+  [col-op]
+  (cond
+    (string? col-op) (split-qualifier col-op)
+    (keyword? col-op) (split-qualifier (name col-op))
+    (and (vector? col-op)
+         (= 2 (count col-op)))
+    (-> (first col-op) name split-qualifier)
+    :else nil))
+
 (defn group-qualified-terms
   "Group (qualified) terms into qualifier and its names. E.g.:
 
@@ -120,29 +131,31 @@
                {})))
 
 (defmethod fmt/format-clause :from [[_ tables] sqlmap]
-  (let [cols (:columns sqlmap) ;; user specified columns
-        table-cols (->> cols
-                        (into (:select sqlmap))
-                        (map (comp first ref-alias))
-                        group-qualified-terms)]
+  (let [table-cols (->> (:select sqlmap)
+                        (map infer-qual-col)
+                        (into {}))
+        spec-cols (->> (:columns sqlmap)
+                       (map (fn [col]
+                              (let [[qual name*] (infer-qual-col col)]
+                                (if (vector? col)
+                                  [qual [name* (second col)]]
+                                  [qual name*])))))
+        free-cols (get table-cols :*)]
     (str "FROM "
          (fmt/comma-join
           (for [table tables]
-            (let [[t alias] (ref-alias table)]
-              (condp instance? t
+            (let [[tab alias] (ref-alias table)
+                  ;; include aliased, and fully qualified columns
+                  cols (concat (get table-cols (keyword alias))
+                               (get table-cols (db/table-name tab)))]
+              (condp instance? tab
                 Table
-                (format-table-columns table
-                              (->> (get table-cols :*)
-                                   ;; fully qualified columns
-                                   (concat (get table-cols (db/table-name t)))
-                                   ;; alias qualified columns
-                                   (concat (get table-cols (keyword alias)))
-                                   set
-                                   ;; only handle dynamic columns
-                                   (filter #(contains? (:dynamic t) %))))
-                String
-                (format-table-columns table cols)
+                (->> cols
+                     (concat (filter #(get (:dynamic tab) %) free-cols))
+                     (format-table-columns table))
                 clojure.lang.Keyword
+                (format-table-columns table cols)
+                String
                 (format-table-columns table cols)
                 ;; subquery etc.
                 (fmt/to-sql table))))))))
