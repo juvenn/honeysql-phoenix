@@ -157,56 +157,11 @@
                 :else
                 (fmt/to-sql table))))))))
 
-(def ^:dynamic *no-op* false)
-
-(defmacro delete-from!
-  ([query]
-   `(let [db# (db/table-db ~(:delete-from query))
-          q# (sql/format ~query)]
-      (if *no-op*
-        (cons db# q#)
-        (db/exec db# q#))))
-  ([table & clauses]
-   `(delete-from! (-> (h/delete-from ~table)
-                      ~@clauses))))
-
-(defmacro upsert-into!
-  "Exectue upsert-into query, E.g.:
-
-  (upsert-into! web-stat
-         (columns :a :b [:dynamic_col :int] ...)
-         (values ...)
-         (on-duplicate-key :ignore))
-  "
-  ([query]
-   `(let [db# (db/table-db ~(:upsert-into query))
-          q# (sql/format ~query)]
-      (if *no-op*
-        (cons db# q#)
-        (db/exec db# q#))))
-  ([table & clauses]
-   `(upsert-into! (-> (upsert-into ~table)
-                      ~@clauses))))
-
-(defmacro select!
-  "Execute select query. E.g.:
-
-  (select! :a :b
-         (from web-stat)
-         (where ...))
-  "
-  ([query]
-   `(let [db# (db/table-db ~(-> (:from query)
-                                first
-                                ref-alias
-                                first))
-          q# (sql/format ~query)]
-      (if *no-op*
-        (cons db# q#)
-        (db/exec db# q#))))
-  ([col & forms]
-   (let [[cols# clauses#] (split-with (comp not list?) forms)
-         cols# (cons col cols#)]
-     `(select! (-> (h/select ~@cols#)
-                   ~@clauses#)))))
-
+(defn exec [sqlmap & {:as opts}]
+  (let [table (or (:upsert-into sqlmap)
+                  (:delete-from sqlmap))]
+    (db/exec-raw (sql/format sqlmap)
+                 :db (db/table-db (or table
+                                      (#(if (sequential? %) (first %) %)
+                                       (first (:from sqlmap))) ))
+                 :query-mode? (nil? table))))

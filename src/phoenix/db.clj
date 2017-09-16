@@ -1,5 +1,6 @@
 (ns phoenix.db
-  (:require [honeysql.format :as fmt]))
+  (:require [honeysql.format :as fmt]
+            [clojure.java.jdbc :as jdbc]))
 
 (def ^:dynamic *default-db* (atom nil))
 
@@ -58,3 +59,19 @@
     (:db table @*default-db*)
     @*default-db*))
 
+(defn exec-raw
+  "Execute raw sql, either in query or update mode. In the query mode (default),
+   options such as :row-fn, :result-fn could be supplied to transform queried
+   result. E.g.:
+
+  (exec-raw [\"SELECT * FROM user WHERE username = ? LIMIT ?\" \"jack\" 1]
+            :db my-db
+            :row-fn identity
+            :query-mode true)
+
+  See also jdbc/query, jdbc/execute!.
+  "
+  [query & {:keys [db query-mode?] :or {query-mode? true} :as opts}]
+  (if query-mode?
+    (jdbc/query    (or db @*default-db*) query opts)
+    (jdbc/execute! (or db @*default-db*) query opts)))
