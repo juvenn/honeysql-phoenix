@@ -1,71 +1,13 @@
 (ns phoenix.honeysql-test
   (:require [clojure.test :refer :all]
-            [clojure.java.jdbc :as j]
             [honeysql.core :as sql]
             [phoenix.db :refer [defdb deftable]]
             [honeysql.helpers :refer :all]
             [phoenix.honeysql :refer :all]))
 
-(defdb test-db
+(defdb default-db
   {:quorum "127.0.0.1:2181"
    :zk-path "/hbase"})
-
-(deftable test-table
-  {:table :test_table
-   :columns [:a :b :c]
-   :dynamic {:x :integer :y "decimal(10,2)" :z "ARRAY[5]"}})
-
-(deftest test-delete-from!
-  (binding [*no-op* true]
-    (is (= [test-db "DELETE FROM test_table WHERE a = ?" 1]
-           (delete-from! (-> (delete-from test-table)
-                             (where [:= :a 1])))))
-
-    (is (= [test-db "DELETE FROM test_table WHERE a = ?" 1]
-           (delete-from! test-table
-                         (where [:= :a 1]))))))
-
-(deftest test-select!
-  (binding [*no-op* true]
-    (is (= [test-db
-            (str "SELECT a, b, y, z"
-                 " FROM test_table (y decimal(10,2), z ARRAY[5])"
-                 " LIMIT ?")
-            5]
-           (select! (-> (select :a :b :y :z)
-                        (from test-table)
-                        (limit 5)))))
-    (is (= [test-db
-            (str "SELECT a, b, y, z"
-                 " FROM test_table (y decimal(10,2), z ARRAY[5])"
-                 " LIMIT ?")
-            5]
-           (select! :a :b :y :z
-                    (from test-table)
-                    (limit 5))))))
-
-(deftest test-examples
-  (binding [*no-op* true]
-    (is (= [test-db
-            (str "UPSERT INTO test_table (a, b, c, x integer, y decimal(10,2))"
-                 " VALUES (?, ?, ?, ?, ?)"
-                 " ON DUPLICATE KEY UPDATE x = ?")
-            1 "b1" "c1" 42 3.14 43]
-           (upsert-into! test-table
-                         (values [{:a 1 :b "b1" :c "c1" :x 42 :y 3.14}])
-                         (on-duplicate-key {:x 43}))))
-    (is (= [test-db
-            (str "SELECT tt.a, tt.b, x, tt.y"
-                 " FROM test_table tt (x integer, y decimal(10,2))"
-                 " WHERE tt.a > ? LIMIT ?")
-            42 5]
-           (select! :tt.a :tt.b :x :tt.y
-                    (from [test-table :tt])
-                    (where [:> :tt.a 42])
-                    (limit 5))))
-    (is (= [test-db "DELETE FROM test_table WHERE a > ?" 42]
-           (delete-from! test-table
-                         (where [:> :a 42]))))))
 
 (deftable user
   {:table :user
