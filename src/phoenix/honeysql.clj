@@ -1,6 +1,5 @@
 (ns phoenix.honeysql
   (:require [clojure.string :as str]
-            [clojure.java.jdbc :as jdbc]
             [phoenix.db :as db]
             [honeysql.format :as fmt]
             [honeysql.core :as sql]
@@ -8,13 +7,14 @@
              :as h])
   (:import [phoenix.db Table]))
 
+(def ^:dynamic *exec-mode* true)
+
+(fmt/register-clause! :on-duplicate-key 225) ;; after :values
+
 (defhelper on-duplicate-key [m args]
   (assoc m :on-duplicate-key (if (sequential? args)
                                (first args)
                                args)))
-
-(defhelper upsert-into [m table]
-  (assoc m :upsert-into (if (sequential? table) (first table) table)))
 
 (defmethod fmt/format-clause :on-duplicate-key [[op values] sqlmap]
   (if (= :ignore values)
@@ -23,26 +23,9 @@
          (fmt/comma-join (for [[k v] values]
                            (str (fmt/to-sql k) " = " (fmt/to-sql v)))))))
 
-(fmt/register-clause! :on-duplicate-key 225) ;; after :values
-
-;; Reset :columns to be no-op, which should be handled at
-;; :from, :upsert-into, :insert-into.
+;; Reset :columns to be no-op
 (defmethod fmt/format-clause :columns [[_ fields] sqlmap]
   "")
-
-(defn- annotate-type
-  "Annotate type to column if it's present."
-  [type col]
-  (if type
-    [col type]
-    col))
-
-(defn- attach-types
-  "Attach type definitions to columns."
-  [type-defs columns]
-  (map
-   #(annotate-type (get type-defs %) %)
-   columns))
 
 (defn- ref-alias
   "Partition a form into ref and alias, assuming [ref alias] form."
@@ -51,21 +34,8 @@
     [(first form) (second form)]
     [form nil]))
 
-(defn format-columns [cols]
+(defn- format-columns [cols]
   (fmt/paren-wrap (fmt/comma-join (map fmt/to-sql cols))))
-
-(defn format-table-columns
-  "Format table with optional typed columns: TEST_TABLE(a, x INTEGER ...)"
-  [table columns]
-  (let [[table aliaz] (ref-alias table)
-        cols (if (instance? Table table)
-               (attach-types (:dynamic table) columns)
-               columns)]
-    (str (fmt/to-sql table)
-         (when aliaz
-           (str " " (fmt/to-sql aliaz)))
-         (when-not (empty? cols)
-          (str " " (format-columns cols))))))
 
 (defmethod fmt/format-clause :values [[_ values] _]
   (if (sequential? (first values))
@@ -80,88 +50,112 @@
             (for [m values]
               (format-columns (map (partial get m) ks))))))))
 
-(defmethod fmt/format-clause :upsert-into [[op table] sqlmap]
-  (let [cols (or (:columns sqlmap)
-                 (keys (first (:values sqlmap))))]
-    (str "UPSERT INTO " (format-table-columns table cols))))
+(defn- format-table-cols
+  "Format table with (optionally-typed) columns."
+  [table cols]
+  (let [[table alias] (if (sequential? table)
+                        table
+                        [table])]
+    (str (fmt/to-sql table)
+         (when alias
+           (str " " (fmt/to-sql alias)))
+         (when-let [cols (seq cols)]
+           (str " " (format-columns cols))))))
 
-;; Phoenix does not support insert-into, define it anyway.
-(defmethod fmt/format-clause :insert-into [[op table] sqlmap]
-  (let [cols (or (:columns sqlmap)
-                 (keys (first (:values sqlmap))))]
-    (str "INSERT INTO " (format-table-columns table cols))))
+(defn- annotate-types
+  "Annotate cols with types, return seq of cols with optional types.
+   E.g.:
+
+  ```
+  => (annotate-types user [:username :email :referrer])
+  (:username :email [:referrer \"VARCHAR(64)\"])
+  ```
+  "
+  [table cols]
+  (if-not (instance? Table table)
+    cols
+    (let [get-type (partial get (:dynamic table))]
+      (map #(if-let [type* (get-type %)]
+              [% type*]
+              %)
+           (seq cols)))))
 
 (fmt/register-clause! :upsert-into 45)       ;; before :select
 
-(defn split-qualifier
-  "Split terms (e.g. columns) into tuple of [qual name]. Qualifier will 
-   be `*` if its not qualified."
-  [^String term]
-  (let [xs (str/split term #"\.")]
-    (if (= 1 (count xs))
-      ["*" (first xs)]
-      xs)))
+(defmethod fmt/format-clause :upsert-into [[op table] sqlmap]
+  (let [cols (or (:columns sqlmap)
+                 (when-let [row (first (:values sqlmap))]
+                   (when (map? row)
+                     (keys row))))]
+    (->> (annotate-types table cols)
+         (format-table-cols table)
+         (str "UPSERT INTO "))))
 
-(defn infer-qual-col
-  "Infer qualifier and column from a column op."
-  [col-op]
+(defhelper upsert-into [m table]
+  (assoc m :upsert-into (if (sequential? table) (first table) table)))
+
+(defn- split-qual-col
+  "Split column name into tuple of [qual name], keywordized. Unqualified columns are
+   grouped under :_."
+  [term]
+  (let [[qual col] (str/split (name term) #"\.")]
+    (if col
+      [(keyword qual) (keyword col)]
+      [:_ (keyword qual)])))
+
+(defn- infer-qual-col
+  "Infer qual(ifier) and column from a column related expr, return
+   qual col pair."
+  [expr]
   (cond
-    (string? col-op) (split-qualifier col-op)
-    (keyword? col-op) (split-qualifier (name col-op))
-    (and (vector? col-op)
-         (= 2 (count col-op)))
-    (-> (first col-op) name split-qualifier)
+    (string? expr) (split-qual-col expr)
+    (keyword? expr) (split-qual-col expr)
+    (and (vector? expr)
+         (= 2 (count expr)))
+    (split-qual-col (first expr))
     :else nil))
 
-(defn group-qualified-terms
-  "Group (qualified) terms into qualifier and its names. E.g.:
-
-    => (group-qualified-terms [:a \"test.b\" :test.c])
-    {:* (:a) :test (:c :b)}
-
-  Note both qualifier and name are keywordized, and unqualified terms are
-  grouped under :*.
-  "
-  [names]
-  (->> names
-       (filter #(or (keyword? %) (string? %)))
-       (map (comp split-qualifier name))
-       (reduce (fn [m [k v]]
-                 (update m (keyword k) (fnil conj []) (keyword v)))
-               {})))
+(defn- group-qual-col
+  "Group qual-col pair by qualifier, keywordized."
+  [pairs]
+  (reduce
+   (fn [m [k v]]
+     (if v
+       (update m (keyword k) (fnil conj []) v)
+       m))
+   {}
+   pairs))
 
 (defmethod fmt/format-clause :from [[_ tables] sqlmap]
-  (let [table-cols (->> (:select sqlmap)
-                        (map infer-qual-col)
-                        (into {}))
-        spec-cols (->> (:columns sqlmap)
-                       (map (fn [col]
-                              (let [[qual name*] (infer-qual-col col)]
-                                (if (vector? col)
-                                  [qual [name* (second col)]]
-                                  [qual name*])))))
-        free-cols (get table-cols :*)]
+  (let [select-cols (->> (:select sqlmap)
+                         (map infer-qual-col)
+                         (group-qual-col))]
     (str "FROM "
          (fmt/comma-join
           (for [table tables]
-            (let [[tab alias] (ref-alias table)
-                  ;; include aliased, and fully qualified columns
-                  cols (concat (get table-cols (keyword alias))
-                               (get table-cols (db/table-name tab)))]
-              (condp instance? tab
-                Table
-                (->> cols
-                     (concat (filter #(get (:dynamic tab) %) free-cols))
-                     (format-table-columns table))
-                clojure.lang.Keyword
-                (format-table-columns table cols)
-                String
-                (format-table-columns table cols)
-                ;; subquery etc.
+            (let [[table* alias types] (if (sequential? table)
+                                         table
+                                         [table])
+                  [alias types] (if (map? alias)
+                                  [nil alias]
+                                  [(keyword alias) types])]
+              (cond
+                ;; no type to infer about
+                (keyword? table*)
+                (format-table-cols [table* alias] types)
+
+                (instance? Table table*)
+                (->> select-cols
+                     ((juxt :_ (or alias :_null) (db/table-name table*)))
+                     (reduce into #{})
+                     (select-keys (:dynamic table*))
+                     ;; user specified type is preferred over inferred
+                     (#(merge %2 %1) types)
+                     (format-table-cols [table* alias]))
+
+                ;; subquery etc
+                :else
                 (fmt/to-sql table))))))))
-
-;; TODO: support join table type-inference
-
 
 (def ^:dynamic *no-op* false)
 
@@ -171,7 +165,7 @@
           q# (sql/format ~query)]
       (if *no-op*
         (cons db# q#)
-        (jdbc/execute! db# q#))))
+        (db/exec db# q#))))
   ([table & clauses]
    `(delete-from! (-> (h/delete-from ~table)
                       ~@clauses))))
@@ -189,7 +183,7 @@
           q# (sql/format ~query)]
       (if *no-op*
         (cons db# q#)
-        (jdbc/execute! db# q#))))
+        (db/exec db# q#))))
   ([table & clauses]
    `(upsert-into! (-> (upsert-into ~table)
                       ~@clauses))))
@@ -209,7 +203,7 @@
           q# (sql/format ~query)]
       (if *no-op*
         (cons db# q#)
-        (jdbc/query db# q#))))
+        (db/exec db# q#))))
   ([col & forms]
    (let [[cols# clauses#] (split-with (comp not list?) forms)
          cols# (cons col cols#)]
