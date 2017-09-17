@@ -1,28 +1,9 @@
 (ns phoenix.honeysql-test
   (:require [clojure.test :refer :all]
             [honeysql.core :as sql]
-            [phoenix.db :refer [defdb deftable]]
             [honeysql.helpers :refer :all]
-            [phoenix.honeysql :refer :all]))
-
-(defdb default-db
-  {:quorum "127.0.0.1:2181"
-   :zk-path "/hbase"})
-
-(deftable user
-  {:table :user
-   :columns [:username :email :phonenumber
-             :address_id]
-   :dynamic {:twitter_id "VARCHAR(64)"
-             :github_id  "VARCHAR(64)"
-             :referrer   "VARCHAR(64)"
-             :landing_url "VARCHAR(64)"}})
-
-(deftable address
-  {:table :address
-   :columns [:country :state :city :zipcode :line
-             :user_id]
-   :dynamic {:line2 "VARCHAR(128)"}})
+            [phoenix.honeysql :refer :all]
+            [phoenix.db-test :refer [user address]]))
 
 (deftest test-upsert-into
   (testing "Upsert map form rows should annotate type"

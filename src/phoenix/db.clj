@@ -1,5 +1,7 @@
 (ns phoenix.db
   (:require [honeysql.format :as fmt]
+            [honeysql.core :as sql]
+            [clojure.string :as str]
             [clojure.java.jdbc :as jdbc]))
 
 (def ^:dynamic *default-db* (atom nil))
@@ -59,19 +61,36 @@
     (:db table @*default-db*)
     @*default-db*))
 
+(defn- select-query? [^String query]
+  (or (str/starts-with? query "SELECT")
+      (str/starts-with? query "select")))
+
 (defn exec-raw
-  "Execute raw sql, either in query or update mode. In the query mode (default),
+  "Execute raw sql, either in query (select) or update mode. In the query mode,
    options such as :row-fn, :result-fn could be supplied to transform queried
-   result. E.g.:
+   result, return seq of rows. E.g.:
 
   (exec-raw [\"SELECT * FROM user WHERE username = ? LIMIT ?\" \"jack\" 1]
             :db my-db
-            :row-fn identity
-            :query-mode true)
+            :row-fn identity)
+
+  While in update mode, return seq of number of rows affected. Phoenix does
+  not yet support generated keys in update mode.
 
   See also jdbc/query, jdbc/execute!.
   "
-  [query & {:keys [db query-mode?] :or {query-mode? true} :as opts}]
-  (if query-mode?
+  [query & {:keys [db] :as opts}]
+  (if (select-query? (first query))
     (jdbc/query    (or db @*default-db*) query opts)
     (jdbc/execute! (or db @*default-db*) query opts)))
+
+(defn exec
+  "Render sqlmap as sql string, then execute it.
+  See also: exec-raw."
+  [sqlmap & {:as opts}]
+  (let [table (or (:upsert-into sqlmap)
+                  (:delete-from sqlmap))]
+    (exec-raw (sql/format sqlmap)
+              :db (table-db (or table
+                                (#(if (sequential? %) (first %) %)
+                                 (first (:from sqlmap))) )))))

@@ -157,11 +157,3 @@
                 :else
                 (fmt/to-sql table))))))))
 
-(defn exec [sqlmap & {:as opts}]
-  (let [table (or (:upsert-into sqlmap)
-                  (:delete-from sqlmap))]
-    (db/exec-raw (sql/format sqlmap)
-                 :db (db/table-db (or table
-                                      (#(if (sequential? %) (first %) %)
-                                       (first (:from sqlmap))) ))
-                 :query-mode? (nil? table))))
