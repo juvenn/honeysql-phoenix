@@ -50,14 +50,19 @@
                    (update-in [:table] #(or % (keyword '~table))))]
      (def ~table (map->Table spec#))))
 
+(defn table?
+  "Test if it is a table instance."
+  [table]
+  (instance? Table table))
+
 (defn table-name
   [table]
-  (if (instance? Table table)
+  (if (table? table)
     (:table table)
     table))
 
 (defn table-db [table]
-  (if (instance? Table table)
+  (if (table? table)
     (:db table @*default-db*)
     @*default-db*))
 

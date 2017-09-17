@@ -4,8 +4,7 @@
             [honeysql.format :as fmt]
             [honeysql.core :as sql]
             [honeysql.helpers :refer [defhelper]
-             :as h])
-  (:import [phoenix.db Table]))
+             :as h]))
 
 (def ^:dynamic *exec-mode* true)
 
@@ -72,7 +71,7 @@
   ```
   "
   [table cols]
-  (if-not (instance? Table table)
+  (if-not (db/table? table)
     cols
     (let [get-type (partial get (:dynamic table))]
       (map #(if-let [type* (get-type %)]
@@ -144,7 +143,7 @@
                 (keyword? table*)
                 (format-table-cols [table* alias] types)
 
-                (instance? Table table*)
+                (db/table? table*)
                 (->> select-cols
                      ((juxt :_ (or alias :_null) (db/table-name table*)))
                      (reduce into #{})
