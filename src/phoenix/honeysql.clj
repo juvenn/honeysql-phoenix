@@ -1,12 +1,35 @@
 (ns phoenix.honeysql
   (:require [clojure.string :as str]
+            [potemkin :refer [import-vars]]
             [phoenix.db :as db]
             [honeysql.format :as fmt]
             [honeysql.core :as sql]
             [honeysql.helpers :refer [defhelper]
              :as h]))
 
-(def ^:dynamic *exec-mode* true)
+(import-vars
+ [honeysql.helpers
+  columns
+  values
+  modifiers
+  select
+  from
+  where
+  join
+  left-join
+  right-join
+  full-join
+  group
+  having
+  order-by
+  limit
+  offset
+  delete-from])
+
+(def as-sql
+  "Format sqlmap as sql string, return vector of sql string and params.
+  See also honeysql.core/format."
+  #'sql/format)
 
 (fmt/register-clause! :on-duplicate-key 225) ;; after :values
 

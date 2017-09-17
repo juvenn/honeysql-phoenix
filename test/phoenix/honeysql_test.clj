@@ -1,7 +1,5 @@
 (ns phoenix.honeysql-test
   (:require [clojure.test :refer :all]
-            [honeysql.core :as sql]
-            [honeysql.helpers :refer :all]
             [phoenix.honeysql :refer :all]
             [phoenix.db-test :refer [user address]]))
 
@@ -15,7 +13,7 @@
            (-> (upsert-into user)
                (values [{:username "jack" :email "jack@example.net" :referrer "google.com"}
                         {:username "jill" :email "jill@example.net" :referrer "google.com"}])
-               sql/format))))
+               as-sql))))
   (testing "Upsert vector form rows specifying columns"
     (is (= [(str "UPSERT INTO user (username, email, referrer VARCHAR(64))  VALUES"
                  " (?, ?, ?),"
@@ -26,7 +24,7 @@
                (columns :username :email :referrer)
                (values [["jack" "jack@example.net" "google.com"]
                         ["jill" "jill@example.net" "google.com"]])
-               sql/format))))
+               as-sql))))
   (testing "User specified type is preferred over inferred"
     (is (= [(str "UPSERT INTO user (username, email, referrer CHAR(64))  VALUES"
                  " (?, ?, ?),"
@@ -37,7 +35,7 @@
                (columns :username :email [:referrer "CHAR(64)"])
                (values [["jack" "jack@example.net" "google.com"]
                         ["jill" "jill@example.net" "google.com"]])
-               sql/format)))))
+               as-sql)))))
 
 (deftest test-upsert-on-duplicate-key
   (testing "On duplicate key ignore"
@@ -49,7 +47,7 @@
                (columns :username :email :phonenumber)
                (values [["jack" "jack@example.net" "15600001234"]])
                (on-duplicate-key :ignore)
-               sql/format))))
+               as-sql))))
   (testing "On duplicate key update"
     (is (= [(str "UPSERT INTO user (username, email, phonenumber)  VALUES"
                  " (?, ?, ?)"
@@ -63,14 +61,14 @@
                (on-duplicate-key {:username "jack2"
                                   :email "jack2@example.net"
                                   :phonenumber "15600001235"})
-               sql/format)))))
+               as-sql)))))
 
 (deftest test-select
   (testing "No type is annotated"
     (is (= [(str "SELECT username, email FROM user")]
            (-> (select :username :email)
                (from user)
-               sql/format))))
+               as-sql))))
   (testing "select fields are auto-annotated"
     (is (= [(str "SELECT username, email, twitter_id AS twitter, github_id AS github"
                  " FROM user (github_id VARCHAR(64), twitter_id VARCHAR(64))")]
@@ -78,7 +76,7 @@
                        [:twitter_id :twitter]
                        [:github_id  :github])
                (from user)
-               sql/format))))
+               as-sql))))
   (testing "Explicitly annotate types"
     (is (= [(str "SELECT username, email, twitter_id AS twitter, github_id AS github"
                  " FROM user (github_id VARCHAR(64), twitter_id CHAR(64))")]
@@ -86,7 +84,7 @@
                        [:twitter_id :twitter]
                        [:github_id  :github])
                (from [user {:twitter_id "CHAR(64)"}])
-               sql/format))))
+               as-sql))))
   (testing "Alias table with explicit annotated types"
     (is (= [(str "SELECT username, email, twitter_id AS twitter, github_id AS github"
                  " FROM user u (github_id VARCHAR(64), twitter_id CHAR(64))")]
@@ -94,7 +92,7 @@
                        [:twitter_id :twitter]
                        [:github_id  :github])
                (from [user :u {:twitter_id "CHAR(64)"}])
-               sql/format))))
+               as-sql))))
   (testing "Select aliased fields are annnotated"
     (is (= [(str "SELECT first_name AS name, addr.line2, addr.zipcode"
                  " FROM user, address addr (line2 CHAR(64))")]
@@ -102,7 +100,7 @@
                        :addr.line2
                        :addr.zipcode)
                (from user [address :addr {:line2 "CHAR(64)"}])
-               sql/format))))
+               as-sql))))
   (testing "Subquery are annotated"
     (is (= [(str "SELECT referrer, user_cnt FROM ("
                  "SELECT referrer, count(user_id) AS user_cnt FROM"
@@ -114,5 +112,5 @@
                          (from user)
                          (group :referrer)))
                (where [:> :user_cnt 5])
-               sql/format)))))
+               as-sql)))))
 

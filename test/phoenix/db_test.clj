@@ -1,6 +1,5 @@
 (ns phoenix.db-test
   (:require [clojure.test :refer :all]
-            [honeysql.helpers :refer :all]
             [phoenix.honeysql :refer :all]
             [phoenix.db :refer [defdb deftable exec exec-raw]]))
 
