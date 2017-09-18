@@ -9,4 +9,5 @@
                  [honeysql "0.9.0"]]
   :profiles {:dev {:dependencies [[org.apache.hbase/hbase-client "1.2.2"]
                                   [org.apache.phoenix/phoenix-core
-                                   "4.10.0-HBase-1.2"]]}})
+                                   "4.10.0-HBase-1.2"]]}}
+  :deploy-repositories [["releases" :clojars]])
