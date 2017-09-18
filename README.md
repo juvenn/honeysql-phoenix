@@ -1,91 +1,117 @@
-# Honey SQL for HBase Phoenix
+# Clojure SQL for HBase Phoenix
+
+Clojure SQL for HBase [Phoenix](http://phoenix.apache.org). This
+library extends [honeysql](https://github.com/jkk/honeysql) with
+additional constructs to support Phoenix-specific queries, such as
+upsert, dynamic columns, etc. It facilitates building SQL queries with
+clojure data structure.
+
+## Build
 
 [![Build Status](https://travis-ci.org/juvenn/honeysql-phoenix.svg?branch=master)](https://travis-ci.org/juvenn/honeysql-phoenix)
-[![Clojars Project](https://img.shields.io/clojars/v/walkingcloud/honeysql-phoenix.svg)](https://clojars.org/walkingcloud/honeysql-phoenix)
+[![Clojars Project](https://img.shields.io/clojars/v/honeysql-phoenix.svg)](https://clojars.org/honeysql-phoenix)
 
-This library extends Honey SQL with additional constructs to support
-Phoenix-specific queries, such as upsert, dynamic columns, etc. It
-facilitates building SQL queries to query Phoenix over HBase.
-
-Apache [Phoenix](http://phoenix.apache.org) provides a low latency SQL
-query engine over HBase, that enables clients query and write HBase
-with ease.
-
-## Usage
+## Getting started
 
 ```clj
-(require '[honeysql.core :as sql]
-         '[honeysql.helpers :refer :all]
-         '[honeysql-phoenix.core :refer :all])
+[honeysql-phoenix "0.2.0"]
 ```
 
-Select with map, or keywords, or helpers:
+In addition to that, a (compatible) phoenix client (e.g. `phoenix-{version}-client.jar`)
+must be added to classpath.
+
+## Examples
 
 ```clj
-;; map
-(-> {:select [:a :b]
-     :from [:table]
-     :where [:= :a 101]}
-     sql/format)
-=> ["SELECT a, b FROM table WHERE a = ?" 101]
-;; build with keywords
-(-> (sql/build :select [:a :b]
-               :from :table
-               :where [:= :a 101])
-    sql/format)
-=> ["SELECT a, b FROM table WHERE a = ?" 101]
-;; with helpers
-(-> (select :a :b)
-    (from :table)
-    (where [:= :a 101])
-    sql/format)
-=> ["SELECT a, b FROM table WHERE a = ?" 101]
+(:require [phoenix.db :refer [defdb deftable] :as db]
+          [phoenix.honeysql :refer :all])
 ```
 
-Select dynamic columns:
+First of all, define db connection and table we would like to connect to
+and query over.
 
 ```clj
-(-> (select :a :b)
-    (from :table)
-    (columns [[:var_a :int] [:var_b "char(8)"] [:var_created :time]])
-    (where [:= :a 101])
-    sql/format)
-=> ["SELECT a, b FROM table (var_a int var_b char(8)) WHERE a = ?" 101]
+(defdb my-db
+  {:quorum "127.0.0.1,127.0.0.2:2181"
+   :zk-path "/hbase"})
+
+(deftable user
+  (db/db* my-db)
+  (db/table* :user)
+  ;; define dynamic columns with its type
+  (db/types* :referrer    "VARCHAR(64)"
+             :landing_url "VARCHAR(64)"))
 ```
 
-Upsert dynamic columns:
+To insert a row:
 
 ```clj
-(-> (upsert-into :table)
-    (columns :a :b [:var_a :int] [:var_b "CHAR(8)"] [:var_created :time])
-    (values [[1 2 101 "hello" :%current_time]])
-    sql/format)
-=> ["UPSERT INTO table (a, b, var_a int, var_b CHAR(8), var_created time) VALUES (?, ?, ?, ?, current_time())" 1 2 101 "hello"]
+(-> (upsert-into user)
+    (values [{:username "jack" :email "jack@example.net"
+              :referrer "google.com"}])
+    db/exec)
 ```
 
-Atomic update with `ON DUPLICATE KEY`:
+In place of `db/exec`, we could invoke `as-sql` to render it as sql string:
 
 ```clj
-(-> (upsert-into :table)
-    (columns :a [:b :varchar] [:c "char(10)"] [:d "char[5]"] [:e :time])
-    (values [[1 "b" "c" "d" :%current_time]])
-    (on-duplicate-key {:a 2 :b "b+" :e :%current_time})
-    sql/format)
-=> ["UPSERT INTO table (a, b varchar, c char(10), d char[5], e time) VALUES (?, ?, ?, ?, current_time()) ON DUPLICATE KEY UPDATE a = ?, b = ?, e = current_time()" 1 "b" "c" "d" 2 "b+"]
+(-> (upsert-into user)
+    (values [{:username "jack" :email "jack@example.net"
+              :referrer "google.com"}])
+    as-sql)
+["UPSERT INTO user (username, email, referrer VARCHAR(64)) VALUES (?, ?, ?)"
+ "jack" "jack@example.net" "google.com"]
 ```
 
-Or ignore on duplicate key:
+Note that `referrer` is type annotated.
+
+To query rows:
 
 ```clj
-(-> (upsert-into :table)
+(-> (select :username :email :referrer :landing_url)
+    (from user)
+    (where [:= :email "jack@example.net"])
+    (limit 1)
+    as-sql)
+;; manually formatted for ease of reading
+["SELECT username, email, referrer, landing_url
+  FROM user (referrer VARCHAR(64), landing_url VARCHAR(64))
+  WHERE email = ? LIMIT ?"
+"jack@example.net" 1]
+```
+
+To delete rows:
+
+```clj
+(-> (delete-from user)
+    (where [:= :email "jack@example.net"])
+    as-sql)
+["DELETE FROM user WHERE email = ?"
+ "jack@example.net"]
+```
+
+Atomic update:
+
+```clj
+(-> (upsert-into user)
+    (values [{:username "jack" :email "jack@example.net"
+              :referrer "google.com"}])
     (on-duplicate-key :ignore)
-    (columns :a [:b :varchar])
-    (values [[1 "b"]])
-    sql/format)
-=> ["UPSERT INTO table (a, b varchar) VALUES (?, ?) ON DUPLICATE KEY IGNORE" 1 "b"]
+    as-sql)
+["UPSERT INTO user (username, email, referrer VARCHAR(64)) VALUES (?, ?, ?) ON DUPLICATE KEY IGNORE"
+ "jack" "jack@example.net" "google.com"]
+
+(-> (upsert-into user)
+    (values [{:username "jack" :email "jack@example.net"
+              :referrer "google.com"}])
+    (on-duplicate-key {:referrer "google.com"})
+    as-sql)
+["UPSERT INTO user (username, email, referrer VARCHAR(64)) VALUES (?, ?, ?)
+   ON DUPLICATE KEY UPDATE referrer = ?"
+"jack" "jack@example.net" "google.com" "google.com"]
 ```
 
-See [honeysql](https://github.com/jkk/honeysql) for more examples.
+For more examples, please refer to [honeysql](https://github.com/jkk/honeysql).
 
 ## License
 
