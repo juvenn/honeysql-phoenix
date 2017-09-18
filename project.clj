@@ -1,6 +1,6 @@
 (defproject phoenix-sql "0.2.0-SNAPSHOT"
   :description "Clojure SQL for HBase Phoenix"
-  :url "https://github.com/juvenn/phoenix-sql"
+  :url "https://github.com/juvenn/honeysql-phoenix"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.8.0"]
