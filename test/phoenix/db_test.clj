@@ -1,26 +1,39 @@
 (ns phoenix.db-test
   (:require [clojure.test :refer :all]
             [phoenix.honeysql :refer :all]
-            [phoenix.db :refer [defdb deftable exec exec-raw]]))
+            [phoenix.db :refer [defdb deftable exec-raw exec]
+             :as db])
+  (:import [phoenix.db Table]))
 
 (defdb default-db
   {:quorum "127.0.0.1:2181"
    :zk-path "/hbase"})
 
+(deftest test-deftable
+  (deftable my_table)
+  (is (= (Table. default-db :my_table)
+         my_table))
+  (deftable my-table
+    (db/table* :my_table))
+  (is (= (Table. default-db :my_table)
+         my-table))
+
+  (deftable my-table
+    (db/table* :my_table)
+    (db/types* :field_a "CHAR(64)"
+               :field_b "VARCHAR(64)"))
+  (is (= {:field_a "CHAR(64)"
+          :field_b "VARCHAR(64)"}
+         (db/types* my-table))))
+
 (deftable user
-  {:table :user
-   :columns [:username :email :phonenumber
-             :id :address_id]
-   :dynamic {:twitter_id "VARCHAR(64)"
+  (db/types* :twitter_id "VARCHAR(64)"
              :github_id  "VARCHAR(64)"
              :referrer   "VARCHAR(64)"
-             :landing_url "VARCHAR(64)"}})
+             :landing_url "VARCHAR(64)"))
 
 (deftable address
-  {:table :address
-   :columns [:country :state :city :zipcode :line
-             :id :user_id]
-   :dynamic {:line2 "VARCHAR(128)"}})
+  (db/types* :line2 "VARCHAR(128)"))
 
 (deftest test-exec-raw
   (is (= {:result 43}

@@ -96,7 +96,7 @@
   [table cols]
   (if-not (db/table? table)
     cols
-    (let [get-type (partial get (:dynamic table))]
+    (let [get-type (partial get (db/types* table))]
       (map #(if-let [type* (get-type %)]
               [% type*]
               %)
@@ -154,28 +154,28 @@
                          (group-qual-col))]
     (str "FROM "
          (fmt/comma-join
-          (for [table tables]
-            (let [[table* alias types] (if (sequential? table)
-                                         table
-                                         [table])
+          (for [table-ref tables]
+            (let [[table alias types] (if (sequential? table-ref)
+                                         table-ref
+                                         [table-ref])
                   [alias types] (if (map? alias)
                                   [nil alias]
                                   [(keyword alias) types])]
               (cond
                 ;; no type to infer about
-                (keyword? table*)
-                (format-table-cols [table* alias] types)
+                (keyword? table)
+                (format-table-cols [table alias] types)
 
-                (db/table? table*)
+                (db/table? table)
                 (->> select-cols
-                     ((juxt :_ (or alias :_null) (db/table-name table*)))
+                     ((juxt :_ (or alias :_null) (db/table* table)))
                      (reduce into #{})
-                     (select-keys (:dynamic table*))
+                     (select-keys (db/types* table))
                      ;; user specified type is preferred over inferred
                      (#(merge %2 %1) types)
-                     (format-table-cols [table* alias]))
+                     (format-table-cols [table alias]))
 
                 ;; subquery etc
                 :else
-                (fmt/to-sql table))))))))
+                (fmt/to-sql table-ref))))))))
 

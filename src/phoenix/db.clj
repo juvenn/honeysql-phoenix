@@ -37,34 +37,53 @@
      (defonce ~db-name spec#)
      (reset! *default-db* ~db-name)))
 
-(defrecord Table [db table columns dynamic]
+(defrecord Table [db table]
   fmt/ToSql
   (to-sql [_]
     (fmt/to-sql (keyword table))))
 
 (defmacro deftable
-  "Defind a table with dynamic columns."
-  [table spec]
-  `(let [spec# (-> ~spec
-                   (update-in [:db] #(or % @*default-db*))
-                   (update-in [:table] #(or % (keyword '~table))))]
-     (def ~table (map->Table spec#))))
+  "Define a table with dynamic columns."
+  [table & forms]
+  `(let [spec# {:db @*default-db*
+                :table (keyword '~table)}]
+     (def ~table
+       (-> (map->Table spec#)
+           ~@forms))))
 
 (defn table?
   "Test if it is a table instance."
   [table]
   (instance? Table table))
 
-(defn table-name
-  [table]
-  (if (table? table)
-    (:table table)
-    table))
+(defn db*
+  "Return db spec, or set db sepc of a table."
+  ([table]
+   (when (table? table)
+     (:db table)))
+  ([^Table table db]
+   (assoc table :db db)))
 
-(defn table-db [table]
-  (if (table? table)
-    (:db table @*default-db*)
-    @*default-db*))
+(defn table*
+  "Return table name, or set table name."
+  ([table]
+   (if (table? table)
+     (:table table)
+     table))
+  ([^Table table name]
+   (assoc table :table name)))
+
+(defn types*
+  "Return column type map, or set column types of a table."
+  ([table]
+   (when (table? table)
+     (:types table)))
+  ([^Table table types]
+   (update table :types merge types))
+  ([^Table table k v & types]
+   (-> table
+       (assoc-in [:types k] v)
+       (update :types into (map vec (partition 2 types))))))
 
 (defn- select-query? [^String query]
   (or (str/starts-with? query "SELECT")
@@ -96,6 +115,6 @@
   (let [table (or (:upsert-into sqlmap)
                   (:delete-from sqlmap))]
     (exec-raw (sql/format sqlmap)
-              :db (table-db (or table
-                                (#(if (sequential? %) (first %) %)
-                                 (first (:from sqlmap))) )))))
+              :db (db* (or table
+                           (#(if (sequential? %) (first %) %)
+                            (first (:from sqlmap))) )))))
