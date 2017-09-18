@@ -1,7 +1,7 @@
 # Clojure SQL for HBase Phoenix
 
 Clojure SQL for HBase [Phoenix](http://phoenix.apache.org). This
-library extends [Honey SQL](https://github.com/jkk/honeysql) with
+library extends [honeysql](https://github.com/jkk/honeysql) with
 additional constructs to support Phoenix-specific queries, such as
 upsert, dynamic columns, etc. It facilitates building SQL queries with
 clojure data structure.
@@ -17,7 +17,7 @@ clojure data structure.
 [honeysql-phoenix "0.2.0"]
 ```
 
-In addition to that, a (compatible) phoenix client (e.g. phoenix-{version}-client.jar)
+In addition to that, a (compatible) phoenix client (e.g. `phoenix-{version}-client.jar`)
 must be added to classpath.
 
 ## Examples
@@ -54,7 +54,7 @@ To insert a row:
 
 In place of `db/exec`, we could invoke `as-sql` to render it as sql string:
 
-```
+```clj
 (-> (upsert-into user)
     (values [{:username "jack" :email "jack@example.net"
               :referrer "google.com"}])
@@ -111,7 +111,7 @@ Atomic update:
 "jack" "jack@example.net" "google.com" "google.com"]
 ```
 
-For more examples, please refer to [Honeysql](https://github.com/jkk/honeysql).
+For more examples, please refer to [honeysql](https://github.com/jkk/honeysql).
 
 ## License
 
