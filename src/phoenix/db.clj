@@ -6,35 +6,58 @@
 
 (def ^:dynamic *default-db* (atom nil))
 
-(defn add-connection-uri
-  "Build and add connection-uri to spec if not present."
-  [{:keys [quorum zk-path] :as spec}]
-  (if (:connection-uri spec)
-    spec
-    (assoc spec :connection-uri
-           (str "jdbc:phoenix:"
-                (or quorum "127.0.0.1:2181")
-                ":"
-                (or zk-path "/hbase")))))
+(defn phoenix
+  "Create an phoenix jdbc driver spec.
+
+  :zk-quorum  Zookeeper quorum url, including port, default `127.0.0.1:2181`
+  :zk-parent  Zookeeper parent, default `/hbase`
+  :principal  Kerberos principal, optional
+  :keytab     Kerberos keytab, optional
+
+  See Phoenix [FAQ](http://phoenix.apache.org/faq.html#What_is_the_Phoenix_JDBC_URL_syntax)."
+  [spec]
+  (-> spec
+      (update :dbtype #(or % :phoenix))
+      (update :connection-uri
+              (fn [uri]
+                (or uri
+                    (->> (map spec [:zk-parent :principal :keytab])
+                         (remove nil?)
+                         (str/join ":")
+                         (str "jdbc:phoenix:"
+                              (or (:zk-quorum spec) "127.0.0.1:2181")
+                              ":")))))))
+
+(defn avatica
+  "Create an avatica jdbc driver spec.
+
+  :url            Full url of avatica server (or phoenix query server), e.g.:
+                  http://127.0.0.1:8765
+  :serialization  Serialization protocol to communicate with server,
+                  `json` or `protobuf`.
+
+  For more options, please see:
+  https://calcite.apache.org/avatica/docs/client_reference.html"
+  [spec]
+  (-> spec
+      (update :dbtype #(or % :avatica))
+      (update :connection-uri
+              (fn [uri]
+                (or uri
+                    (reduce-kv (fn [uri k v]
+                                 (if v
+                                   (str uri (name k) "=" (name v) ";")
+                                   uri))
+                               "jdbc:avatica:remote:"
+                               spec))))))
 
 (defmacro defdb
   "
-  Define a connection spec in the form of jdbc spec. The last def
-  will be used by default for queries where no db were specified. The
-  following options can be specified in the spec:
-
-  :connection-uri  If present will be used to connect to jdbc regardless
-                   of :quorum and :zk-path.
-  :quorum          zookeeper quorum, it should contain port. Default to
-                   be `127.0.0.1:2181`.
-  :zk-path         hbase's zookeeper znode parent, default to be
-                   `/hbase`.
-
-  See java.jdbc.
+  Define a db spec and set it as default.
   "
   [db-name spec]
-  `(let [spec# (add-connection-uri ~spec)]
-     (defonce ~db-name spec#)
+  `(let [db# ~spec]
+     (defonce ~db-name db#)
      (reset! *default-db* ~db-name)))
 
 (defrecord Table [db table]

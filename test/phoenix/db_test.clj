@@ -1,13 +1,12 @@
 (ns phoenix.db-test
   (:require [clojure.test :refer :all]
             [phoenix.honeysql :refer :all]
-            [phoenix.db :refer [defdb deftable exec-raw exec]
+            [phoenix.db :refer [defdb deftable phoenix avatica]
              :as db])
   (:import [phoenix.db Table]))
 
 (defdb default-db
-  {:quorum "127.0.0.1:2181"
-   :zk-path "/hbase"})
+  (phoenix {:zk-quorum "127.0.0.1:2181"}))
 
 (deftest test-deftable
   (deftable my_table)
@@ -37,21 +36,21 @@
 
 (deftest test-exec-raw
   (is (= {:result 43}
-         (first (exec-raw ["SELECT 42+1 AS result"]))))
+         (first (db/exec-raw ["SELECT 42+1 AS result"]))))
   (is (= {:result 43}
-         (first (exec-raw ["SELECT ? + ? AS result" 42 1]))))
+         (first (db/exec-raw ["SELECT ? + ? AS result" 42 1]))))
   (is (= {:result -43}
-         (first (exec-raw ["SELECT ? + ? AS result" 42 1]
+         (first (db/exec-raw ["SELECT ? + ? AS result" 42 1]
                           :row-fn #(update-in % [:result] -)))))
   (testing "DML queries"
     ;; phoenix does not yet support stmt.getGeneratedKeys for upsert statement,
     ;; it always returns number of rows affected.
     (is (= [1]
-         (exec-raw [(str "UPSERT INTO user (id, username, email, phonenumber) VALUES"
+         (db/exec-raw [(str "UPSERT INTO user (id, username, email, phonenumber) VALUES"
                          " (NEXT VALUE FOR user_id_seq, ?, ?, ?)")
                     "cc5767f0" "cc5767f0@example.net" "25600001234"])))
     (is (= [1]
-         (exec-raw [(str "DELETE FROM user WHERE email = ?") "cc5767f0@example.net"])))))
+         (db/exec-raw [(str "DELETE FROM user WHERE email = ?") "cc5767f0@example.net"])))))
 
 (deftest test-exec
   (is (= [1]
@@ -59,7 +58,7 @@
              (columns :id :username :email :referrer)
              (values [[(keyword "NEXT VALUE FOR user_id_seq"), "6e4c580b", "6e4c580b@example.net", "google.com"]])
              (on-duplicate-key :ignore)
-             exec)))
+             db/exec)))
   (is (= {:username "6e4c580b"
           :email "6e4c580b@example.net"
           :phonenumber nil
@@ -68,16 +67,16 @@
              (from user)
              (where [:= :username "6e4c580b"])
              (limit 1)
-             exec
+             db/exec
              first)))
   (is (= [1]
          (-> (delete-from user)
              (where [:= :username "6e4c580b"])
-             exec)))
+             db/exec)))
   (is (= nil
          (-> (select :username :email :phonenumber :referrer)
              (from user)
              (where [:= :username "6e4c580b"])
              (limit 1)
-             exec
+             db/exec
              first))))
