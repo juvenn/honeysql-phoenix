@@ -17,7 +17,7 @@ Specify dependencies:
 
 ```clj
 :dependencies [
-  [honeysql-phoenix "0.2.0"]
+  [honeysql-phoenix "0.2.1"]
 ]
 ```
 

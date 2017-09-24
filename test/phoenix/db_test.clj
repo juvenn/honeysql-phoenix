@@ -1,7 +1,7 @@
 (ns phoenix.db-test
   (:require [clojure.test :refer :all]
             [phoenix.honeysql :refer :all]
-            [phoenix.db :refer [defdb deftable phoenix avatica]
+            [phoenix.db :refer [defdb deftable phoenix]
              :as db])
   (:import [phoenix.db Table]))
 
