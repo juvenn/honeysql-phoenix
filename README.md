@@ -13,28 +13,34 @@ clojure data structure.
 
 ## Getting started
 
+Specify dependencies:
+
 ```clj
-[honeysql-phoenix "0.2.0"]
+:dependencies [
+  [honeysql-phoenix "0.2.0"]
+]
 ```
 
-In addition to that, a (compatible) phoenix client (e.g. `phoenix-{version}-client.jar`)
-must be added to classpath.
+In addition to that, a (compatible) phoenix client
+(e.g. `phoenix-{version}-client.jar`) should be added to classpath.
 
 ## Examples
 
 ```clj
-(:require [phoenix.db :refer [defdb deftable] :as db]
+(:require [phoenix.db :refer [defdb deftable phoenix] :as db]
           [phoenix.honeysql :refer :all])
 ```
 
-First of all, define db connection and table we would like to connect to
-and query over.
+First of all, define db connection:
 
 ```clj
 (defdb my-db
-  {:quorum "127.0.0.1,127.0.0.2:2181"
-   :zk-path "/hbase"})
+  (phoenix {:zk-quorum "127.0.0.1,127.0.0.2:2181"}))
+```
 
+Then define table(s) with optional dynamic typed columns:
+
+```clj
 (deftable user
   (db/db* my-db)
   (db/table* :user)
@@ -52,7 +58,8 @@ To insert a row:
     db/exec)
 ```
 
-In place of `db/exec`, we could invoke `as-sql` to render it as sql string:
+In place of `db/exec`, we could invoke `as-sql` to render it as sql
+string:
 
 ```clj
 (-> (upsert-into user)
