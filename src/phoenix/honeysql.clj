@@ -134,7 +134,7 @@
     (keyword? expr) (split-qual-col expr)
     (and (vector? expr)
          (= 2 (count expr)))
-    (split-qual-col (first expr))
+    (infer-qual-col (first expr))
     :else nil))
 
 (defn- group-qual-col
